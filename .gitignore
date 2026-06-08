@@ -1,0 +1,28 @@
+# Node packages
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# Next.js build outputs
+.next/
+out/
+build/
+dist/
+
+# Database, secrets and environment configurations
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.db
+*.db-journal
+
+# Sandboxed execution files
+ai-agent/workspace/*
+!ai-agent/workspace/.gitkeep
+
+# Operating system files
+.DS_Store
+Thumbs.db

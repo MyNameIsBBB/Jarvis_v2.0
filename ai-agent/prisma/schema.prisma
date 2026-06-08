@@ -1,0 +1,25 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum TaskStatus {
+  IDLE
+  RUNNING
+  PAUSED
+  COMPLETED
+  AWAITING_HUMAN
+}
+
+model AgentTask {
+  id         String     @id @default(uuid()) @db.Uuid
+  title      String
+  status     TaskStatus @default(IDLE)
+  graphState Json
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
