@@ -18,6 +18,9 @@ const defaultSelfImprovement = llmProfile === 'LARGE_MODEL';
 // Tools layering is on by default for large models to save context/attention
 const defaultToolsLayering = llmProfile === 'LARGE_MODEL';
 
+import fs from 'fs';
+import path from 'path';
+
 const disabledToolsString = process.env.DISABLED_TOOLS || '';
 const initialDisabledTools = disabledToolsString
   .split(',')
@@ -27,6 +30,21 @@ const initialDisabledTools = disabledToolsString
 // Global environment-level immutable copy to track locks
 export const IMMUTABLE_DISABLED_TOOLS: string[] = [...initialDisabledTools];
 
+// Load persisted user-toggled disabled tools if the file exists
+let persistedDisabledTools: string[] = [...initialDisabledTools];
+const stateFilePath = path.join(process.cwd(), 'disabled_tools.json');
+try {
+  if (fs.existsSync(stateFilePath)) {
+    const fileData = fs.readFileSync(stateFilePath, 'utf8');
+    const parsed = JSON.parse(fileData);
+    if (Array.isArray(parsed)) {
+      persistedDisabledTools = parsed;
+    }
+  }
+} catch (e) {
+  console.warn('[CONFIG] Failed to load persisted tool state:', e);
+}
+
 export const config: AppConfig = {
   LLM_PROFILE: llmProfile,
   ENABLE_TOOLS_LAYERING: process.env.ENABLE_TOOLS_LAYERING !== undefined 
@@ -35,8 +53,16 @@ export const config: AppConfig = {
   ENABLE_SELF_IMPROVEMENT: process.env.ENABLE_SELF_IMPROVEMENT !== undefined 
     ? process.env.ENABLE_SELF_IMPROVEMENT === 'true' 
     : defaultSelfImprovement,
-  DISABLED_TOOLS: [...initialDisabledTools],
+  DISABLED_TOOLS: persistedDisabledTools,
 };
+
+export function saveConfigState() {
+  try {
+    fs.writeFileSync(stateFilePath, JSON.stringify(config.DISABLED_TOOLS), 'utf8');
+  } catch (e) {
+    console.error('[CONFIG] Failed to save tool state to disk:', e);
+  }
+}
 
 console.log('[CONFIG] Master Switchboard Settings Initialized:', {
   LLM_PROFILE: config.LLM_PROFILE,

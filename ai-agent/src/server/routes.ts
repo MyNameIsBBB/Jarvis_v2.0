@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../utils/prisma';
 import { runAgentLoop } from '../agent/orchestrator';
 import { broadcastSessionUpdate, broadcastSessionRedirect } from './ws';
-import { config, IMMUTABLE_DISABLED_TOOLS } from '../config';
+import { config, IMMUTABLE_DISABLED_TOOLS, saveConfigState } from '../config';
 import { registry } from '../tools/registry';
 import { waitingApprovals } from '../utils/approval';
 import { routeSessionMessage } from '../agent/router';
@@ -115,6 +115,7 @@ router.post('/config/tools', (req, res) => {
     }
   }
 
+  saveConfigState();
   console.log(`[CONFIG] Tool "${name}" set to enabled=${enabled}. Current disabled list:`, config.DISABLED_TOOLS);
   return res.json({ success: true, config });
 });
