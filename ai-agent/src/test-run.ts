@@ -1,4 +1,4 @@
-import { executeFileSystem } from './agent/tools';
+import { workspace_file_manager } from './agent/tools';
 import { runInSandbox } from './utils/docker';
 
 async function runVerification() {
@@ -14,7 +14,7 @@ async function runVerification() {
   console.log('[TEST 1] Verifying Directory Traversal Protection...');
   try {
     // Attempting to write a file outside the workspace using directory traversal
-    const resultStr = await executeFileSystem({
+    const resultStr = await workspace_file_manager({
       action: 'write',
       path: '../../host_tamper.txt',
       content: 'malicious content',
@@ -34,7 +34,7 @@ async function runVerification() {
   testsTotal++;
   console.log('\n[TEST 2] Verifying File Write/Read inside Workspace...');
   try {
-    const writeResultStr = await executeFileSystem({
+    const writeResultStr = await workspace_file_manager({
       action: 'write',
       path: 'test_script.js',
       content: 'console.log("Hello from Sandbox JS Execution!")',
@@ -42,7 +42,7 @@ async function runVerification() {
     const writeResult = JSON.parse(writeResultStr);
     console.log(`Write Result:`, writeResult);
 
-    const readResultStr = await executeFileSystem({
+    const readResultStr = await workspace_file_manager({
       action: 'read',
       path: 'test_script.js',
     });

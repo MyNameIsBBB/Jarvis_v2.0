@@ -1,41 +1,23 @@
-export type TaskStatus = 'IDLE' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'AWAITING_HUMAN';
-
-export interface AgentMessage {
+export interface ChatMessage {
+  id?: string;
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
   name?: string;
+  createdAt?: Date;
 }
 
-export interface GraphState {
-  messages: AgentMessage[];
-  variables: Record<string, any>;
-  tokenLogs?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-    timestamp: string;
-  }[];
+export interface ToolCall {
+  function: {
+    name: string;
+    arguments: Record<string, any>;
+  };
 }
 
-export type ToolType = 'executeFileSystem' | 'executeDockerSandbox' | 'await_human' | 'complete_task';
-
-export interface AgentLLMResponse {
-  thought: string;
-  plan: string;
-  tool_to_use: ToolType;
-  tool_args: Record<string, any>;
-}
-
-export interface FileSystemArgs {
-  action: 'read' | 'write' | 'list';
-  path: string;
-  content?: string;
-}
-
-export interface DockerSandboxArgs {
-  command: string;
-}
-
-export interface AwaitHumanArgs {
-  prompt: string;
+export interface OllamaChatResponse {
+  message: {
+    role: 'assistant';
+    content: string;
+    tool_calls?: ToolCall[];
+  };
+  done: boolean;
 }

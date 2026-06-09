@@ -24,3 +24,31 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Custom Cozy Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(160, 124, 90, 0.35);
+  border-radius: 10px;
+  transition: background 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(160, 124, 90, 0.7);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(140, 115, 85, 0.3);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 115, 85, 0.65);
+}

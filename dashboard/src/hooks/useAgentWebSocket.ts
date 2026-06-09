@@ -1,26 +1,23 @@
 import { useEffect, useState, useRef } from 'react';
 
-export interface WebSocketUpdatePayload {
-  type: string;
-  taskId: string;
-  status: 'IDLE' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'AWAITING_HUMAN';
-  title: string;
-  graphState: {
-    messages: { role: 'system' | 'user' | 'assistant' | 'tool'; content: string; name?: string }[];
-    variables: Record<string, any>;
-    tokenLogs?: { promptTokens: number; completionTokens: number; totalTokens: number; timestamp: string }[];
-  };
-  interruptionPrompt?: string;
+export interface WebSocketPayload {
+  type: 'chat_token' | 'tool_status' | 'session_update' | 'welcome';
+  sessionId?: string;
+  token?: string;
+  toolName?: string;
+  status?: 'running' | 'completed' | 'failed';
+  result?: string;
+  eventType?: 'chat_done' | 'session_created' | 'session_deleted';
 }
 
-export function useAgentWebSocket(onTaskUpdate: (data: WebSocketUpdatePayload) => void) {
+export function useAgentWebSocket(onMessageReceived: (payload: WebSocketPayload) => void) {
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     // Determine WebSocket host URL
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3000';
-    console.log(`[WS] Initializing connection to ${wsUrl}...`);
+    console.log(`[WS] Connecting to ${wsUrl}...`);
     
     const ws = new WebSocket(wsUrl);
     socketRef.current = ws;
@@ -32,12 +29,8 @@ export function useAgentWebSocket(onTaskUpdate: (data: WebSocketUpdatePayload) =
 
     ws.onmessage = (event) => {
       try {
-        const payload = JSON.parse(event.data);
-        if (payload.type === 'task_update') {
-          onTaskUpdate(payload as WebSocketUpdatePayload);
-        } else {
-          console.log('[WS] Received server payload:', payload);
-        }
+        const payload = JSON.parse(event.data) as WebSocketPayload;
+        onMessageReceived(payload);
       } catch (err) {
         console.error('[WS] Error parsing incoming socket stream payload:', err);
       }
@@ -57,7 +50,7 @@ export function useAgentWebSocket(onTaskUpdate: (data: WebSocketUpdatePayload) =
         ws.close();
       }
     };
-  }, [onTaskUpdate]);
+  }, [onMessageReceived]);
 
   return { isConnected };
 }

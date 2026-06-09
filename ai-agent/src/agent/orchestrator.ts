@@ -1,256 +1,261 @@
 import axios from 'axios';
 import { prisma } from '../utils/prisma';
-import { executeFileSystem, executeDockerSandbox, handleInterruption } from './tools';
-import { broadcastTaskUpdate } from '../server/ws';
-import { GraphState, TaskStatus, AgentLLMResponse, AgentMessage } from './types';
+import { config } from '../config';
+import { registry } from '../tools/registry';
+import { 
+  broadcastToken, 
+  broadcastToolStatus, 
+  broadcastSessionUpdate 
+} from '../server/ws';
 
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma4';
 
-const SYSTEM_PROMPT = `You are a custom, lightweight, durable Agentic AI system.
-You solve tasks by executing tools. You run inside a step-by-step thinking loop.
-After each tool execution, you will see the tool's output.
+const SYSTEM_PROMPT_LARGE = `You are "Jarvis", a personal, friendly, and highly capable AI assistant companion.
+You are running on the user's local machine/home lab.
+You can chat about anything (coding, math, life, general knowledge, etc.).
+You also have access to local tools that you can call natively to perform background tasks when the user requests them.
+Only call tools when they are explicitly or implicitly required to satisfy the user's request. Otherwise, respond in friendly, flowing Markdown text.`;
 
-You MUST respond with a single, valid JSON object matching this schema:
-{
-  "thought": "Detail your reasoning about the objective, recent execution results, and what to do next.",
-  "plan": "Explain your step-by-step strategy to complete the objective.",
-  "tool_to_use": "executeFileSystem" | "executeDockerSandbox" | "await_human" | "complete_task",
-  "tool_args": {
-     // For 'executeFileSystem': { "action": "read" | "write" | "list", "path": "relativePath", "content": "fileContentToWrite?" }
-     // For 'executeDockerSandbox': { "command": "shellCommand" }
-     // For 'await_human': { "prompt": "Question or prompt requiring human response" }
-     // For 'complete_task': {}
-  }
-}
-
-Rules:
-1. ONLY write JSON. No markdown blocks around JSON, no extra text, no apologies.
-2. All file paths must be relative to the workspace folder.
-3. Sandbox actions run inside a container. Make sure scripts are created before you execute them.
-4. If you require clarification or feedback from a human, use the 'await_human' tool immediately. Do not guess.`;
+const SYSTEM_PROMPT_SMALL = `You are Jarvis, a helpful local AI assistant. Keep responses brief, clear, and friendly. Call tools if necessary.`;
 
 /**
- * Strips markdown code blocks and parses LLM JSON response.
+ * Orchestrator chat loop that manages sending history to Ollama,
+ * streaming responses, and running tools recursively.
  */
-function parseJSONResponse(rawContent: string): AgentLLMResponse {
-  let cleaned = rawContent.trim();
-  // Remove markdown code blocks if the LLM wrapped it
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(json)?/, '').replace(/```$/, '').trim();
-  }
-  return JSON.parse(cleaned) as AgentLLMResponse;
-}
+export async function runAgentLoop(sessionId: string): Promise<void> {
+  console.log(`[ORCHESTRATOR] Resuming session loop for ${sessionId}...`);
 
-/**
- * Running loop of the durable state machine.
- */
-export async function runAgentLoop(taskId: string, userFeedback?: string): Promise<void> {
-  console.log(`[ORCHESTRATOR] Starting/Resuming task ${taskId}...`);
+  try {
+    // 1. Retrieve all past messages in the session
+    const messages = await prisma.message.findMany({
+      where: { sessionId },
+      orderBy: { createdAt: 'asc' },
+    });
 
-  // 1. Fetch the latest task state
-  const task = await prisma.agentTask.findUnique({
-    where: { id: taskId },
-  });
+    const userMessages = messages.filter(m => m.role === 'user');
+    const latestUserQuery = userMessages.length > 0 ? userMessages[userMessages.length - 1].content : '';
 
-  if (!task) {
-    throw new Error(`Task with ID ${taskId} not found.`);
-  }
+    // 2. Tune prompt complexity and context length based on LLM Profile
+    let finalMessages = [...messages];
+    let activeSystemPrompt = SYSTEM_PROMPT_LARGE;
 
-  let state: GraphState = task.graphState as unknown as GraphState;
-  let status: TaskStatus = task.status as TaskStatus;
-
-  // 2. Handle Resume & Pause checks
-  if (status === 'PAUSED' || status === 'AWAITING_HUMAN') {
-    if (!userFeedback) {
-      console.log(`[ORCHESTRATOR] Task ${taskId} is currently paused and no user feedback was provided. Halting.`);
-      return;
+    if (config.LLM_PROFILE === 'SMALL_MODEL') {
+      activeSystemPrompt = SYSTEM_PROMPT_SMALL;
+      if (messages.length > 4) {
+        console.log(`[ORCHESTRATOR] SMALL_MODEL profile: Pruning context history from ${messages.length} to 4 messages.`);
+        finalMessages = messages.slice(-4);
+      }
+    } else {
+      if (messages.length > 20) {
+        console.log(`[ORCHESTRATOR] LARGE_MODEL profile: Pruning context history to the last 20 messages.`);
+        finalMessages = messages.slice(-20);
+      }
     }
 
-    // Append user feedback and transition back to RUNNING
-    state.messages.push({
-      role: 'user',
-      content: `[USER RESPONSE/FEEDBACK]: ${userFeedback}`,
-    });
-    status = 'RUNNING';
-
-    // Persist this initial change
-    await prisma.agentTask.update({
-      where: { id: taskId },
-      data: {
-        status,
-        graphState: state as any,
-      },
-    });
-
-    console.log(`[ORCHESTRATOR] Feedback injected. Task ${taskId} status reset to RUNNING.`);
-  } else if (status === 'COMPLETED') {
-    console.log(`[ORCHESTRATOR] Task ${taskId} is already COMPLETED. Halting.`);
-    return;
-  } else {
-    // If IDLE, transition to RUNNING
-    status = 'RUNNING';
-    await prisma.agentTask.update({
-      where: { id: taskId },
-      data: { status },
-    });
-  }
-
-  // Maximum safety iteration counter to avoid infinite API loops
-  let iterations = 0;
-  const maxIterations = 30;
-
-  // 3. Enter core reasoning loop
-  while (status === 'RUNNING' && iterations < maxIterations) {
-    iterations++;
-    console.log(`[ORCHESTRATOR] Task ${taskId} - Iteration ${iterations}`);
-
-    // Map system prompt and task messages for Ollama API
-    const messagesToSend = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...state.messages.map(m => ({ role: m.role, content: m.content })),
+    const ollamaMessages = [
+      { role: 'system', content: activeSystemPrompt },
+      ...finalMessages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+        ...(msg.name ? { name: msg.name } : {}),
+      })),
     ];
 
-    let parsedResponse: AgentLLMResponse;
-    let tokenLogEntry: any = null;
+    // 3. Dynamic Tool Layering pre-check
+    let activeCategories = ['FileManagement', 'HomeLab', 'Developer', 'SelfImprovement', 'Dynamic'];
+    
+    if (config.ENABLE_TOOLS_LAYERING && latestUserQuery) {
+      console.log(`[LAYERING] Tools layering is enabled. Classifying user intent for: "${latestUserQuery.slice(0, 50)}..."`);
+      try {
+        const classificationPrompt = `System: You are an intent classifier. Categorize the user's latest query into zero, one, or more of these categories:
+        - FileManagement (if the user wants to read, write, search, or list files/directories)
+        - HomeLab (if the user wants to start, stop, monitor or execute commands on the Minecraft server container)
+        - Developer (if the user wants to run code execution, sandboxes, scripts, or terminal commands)
+        - SelfImprovement (if the user wants to create a new tool, write code for a new function, or expand assistant capabilities)
+        - Dynamic (if the user wants to run a custom dynamic tool previously created)
+        
+        User Query: "${latestUserQuery}"
+        
+        Respond ONLY with a comma-separated list of categories. Example response: FileManagement, Developer. If none apply, respond with: None.`;
+        
+        const classifyResponse = await axios.post(`${OLLAMA_API_URL}/api/chat`, {
+          model: OLLAMA_MODEL,
+          messages: [{ role: 'user', content: classificationPrompt }],
+          stream: false,
+          options: { temperature: 0.1 }
+        });
+        
+        const outputText = classifyResponse.data.message?.content || '';
+        console.log(`[LAYERING] Raw classifier output: "${outputText.trim()}"`);
+        
+        const parsedCategories: string[] = [];
+        if (outputText.includes('FileManagement')) parsedCategories.push('FileManagement');
+        if (outputText.includes('HomeLab')) parsedCategories.push('HomeLab');
+        if (outputText.includes('Developer')) parsedCategories.push('Developer');
+        if (outputText.includes('SelfImprovement')) parsedCategories.push('SelfImprovement');
+        if (outputText.includes('Dynamic')) parsedCategories.push('Dynamic');
+        
+        if (parsedCategories.length > 0) {
+          activeCategories = parsedCategories;
+        }
+      } catch (e: any) {
+        console.warn(`[LAYERING] Pre-check intent classification failed: ${e.message}. Falling back to all tool layers.`);
+      }
+    }
 
-    try {
-      // Call local Ollama chat API
-      const response = await axios.post(`${OLLAMA_API_URL}/api/chat`, {
-        model: OLLAMA_MODEL,
-        messages: messagesToSend,
-        format: 'json',
-        stream: false,
-      }, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 90000, // 90s timeout for heavier models running locally
+    console.log(`[LAYERING] Active tool categories for this turn:`, activeCategories);
+
+    // Get active tools (scrubbed of blacklisted options inside registry.getAllTools())
+    const activeTools = registry.getAllTools().filter(t => activeCategories.includes(t.category));
+    const toolsToSend = activeTools.map(t => ({
+      type: 'function',
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters
+      }
+    }));
+
+    console.log(`[ORCHESTRATOR] Sending request to Ollama (${OLLAMA_MODEL}) with ${ollamaMessages.length} messages and ${toolsToSend.length} active tools.`);
+
+    const response = await axios.post(`${OLLAMA_API_URL}/api/chat`, {
+      model: OLLAMA_MODEL,
+      messages: ollamaMessages,
+      ...(toolsToSend.length > 0 ? { tools: toolsToSend } : {}),
+      stream: true,
+    }, {
+      responseType: 'stream',
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 90000,
+    });
+
+    let assistantText = '';
+    let toolCalls: any[] = [];
+    let buffer = '';
+
+    const stream = response.data;
+
+    await new Promise<void>((resolve, reject) => {
+      stream.on('data', (chunk: Buffer) => {
+        buffer += chunk.toString('utf8');
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const parsed = JSON.parse(line);
+            if (parsed.message?.tool_calls && parsed.message.tool_calls.length > 0) {
+              toolCalls.push(...parsed.message.tool_calls);
+            }
+            if (parsed.message?.content) {
+              const token = parsed.message.content;
+              assistantText += token;
+              broadcastToken(sessionId, token);
+            }
+          } catch (err) {
+            console.error('[ORCHESTRATOR] Failed to parse line:', line, err);
+          }
+        }
       });
 
-      const rawContent = response.data.message.content;
-      tokenLogEntry = {
-        promptTokens: response.data.prompt_eval_count || 0,
-        completionTokens: response.data.eval_count || 0,
-        totalTokens: (response.data.prompt_eval_count || 0) + (response.data.eval_count || 0),
-        timestamp: new Date().toISOString(),
-      };
-
-      parsedResponse = parseJSONResponse(rawContent);
-      console.log(`[THOUGHT] ${parsedResponse.thought}`);
-      console.log(`[PLAN] ${parsedResponse.plan}`);
-      console.log(`[ACTION] Tool: ${parsedResponse.tool_to_use}`);
-    } catch (err: any) {
-      console.error('[OLLAMA ERROR] API Call or parsing failed:', err.message || err);
-      // Log error to agent state and retry or pause
-      const errorMsg = `System/LLM Call Error: ${err.message || String(err)}`;
-      state.messages.push({
-        role: 'system',
-        content: `Error occurred: ${errorMsg}. Please adjust your output formatting or commands.`,
+      stream.on('end', () => {
+        if (buffer.trim()) {
+          try {
+            const parsed = JSON.parse(buffer);
+            if (parsed.message?.tool_calls) {
+              toolCalls.push(...parsed.message.tool_calls);
+            }
+            if (parsed.message?.content) {
+              assistantText += parsed.message.content;
+              broadcastToken(sessionId, parsed.message.content);
+            }
+          } catch (e) {}
+        }
+        resolve();
       });
 
-      // Pause to avoid infinite crashing
-      status = 'PAUSED';
-      await prisma.agentTask.update({
-        where: { id: taskId },
+      stream.on('error', (err: any) => reject(err));
+    });
+
+    if (toolCalls.length > 0) {
+      console.log(`[ORCHESTRATOR] Model returned ${toolCalls.length} tool calls.`);
+
+      await prisma.message.create({
         data: {
-          status,
-          graphState: state as any,
+          sessionId,
+          role: 'assistant',
+          content: `[Tool Call requested: ${toolCalls.map(tc => tc.function.name).join(', ')}]`,
         },
       });
-      broadcastTaskUpdate({ taskId, status, title: task.title, graphState: state });
-      break;
-    }
 
-    // Append LLM's response to history
-    state.messages.push({
-      role: 'assistant',
-      content: JSON.stringify(parsedResponse),
-    });
+      for (const tc of toolCalls) {
+        const toolName = tc.function.name;
+        const toolArgs = tc.function.arguments || {};
 
-    if (tokenLogEntry) {
-      if (!state.tokenLogs) state.tokenLogs = [];
-      state.tokenLogs.push(tokenLogEntry);
-    }
+        console.log(`[TOOL CALL] Executing registry tool "${toolName}"...`);
+        broadcastToolStatus(sessionId, toolName, 'running');
 
-    let toolResult = '';
-    let isInterrupted = false;
+        let toolResult = '';
+        const registeredTool = registry.getTool(toolName);
 
-    // 4. Handle tool execution via switch-case
-    switch (parsedResponse.tool_to_use) {
-      case 'executeFileSystem': {
-        const fileArgs = parsedResponse.tool_args as any;
-        toolResult = await executeFileSystem(fileArgs);
-        break;
-      }
+        try {
+          if (!registeredTool) {
+            throw new Error(`Tool "${toolName}" is not registered in dynamic registry.`);
+          }
 
-      case 'executeDockerSandbox': {
-        const dockerArgs = parsedResponse.tool_args as any;
-        toolResult = await executeDockerSandbox(dockerArgs);
-        break;
-      }
+          // Inject sessionId for human interruption prompt hook
+          const injectedArgs = { ...toolArgs, sessionId };
+          toolResult = await registeredTool.handler(injectedArgs);
+          broadcastToolStatus(sessionId, toolName, 'completed', toolResult);
+        } catch (toolError: any) {
+          console.error(`[TOOL ERROR] Dynamic handler failed for "${toolName}":`, toolError);
+          toolResult = JSON.stringify({ success: false, error: toolError.message || String(toolError) });
+          broadcastToolStatus(sessionId, toolName, 'failed', toolResult);
+        }
 
-      case 'await_human': {
-        const humanArgs = parsedResponse.tool_args as any;
-        const result = await handleInterruption(taskId, state, humanArgs);
-        isInterrupted = result.interrupted;
-        status = 'AWAITING_HUMAN';
-        break;
-      }
-
-      case 'complete_task': {
-        status = 'COMPLETED';
-        toolResult = JSON.stringify({ success: true, message: 'Task completed successfully' });
-        break;
-      }
-
-      default:
-        toolResult = JSON.stringify({
-          success: false,
-          error: `Unknown tool requested: "${parsedResponse.tool_to_use}"`,
+        await prisma.message.create({
+          data: {
+            sessionId,
+            role: 'tool',
+            name: toolName,
+            content: toolResult,
+          },
         });
-        break;
+      }
+
+      // Re-run orchestrator loop recursively
+      return runAgentLoop(sessionId);
+    } else {
+      if (assistantText.trim()) {
+        await prisma.message.create({
+          data: {
+            sessionId,
+            role: 'assistant',
+            content: assistantText,
+          },
+        });
+      }
+
+      broadcastSessionUpdate(sessionId, 'chat_done');
+      console.log(`[ORCHESTRATOR] Chat stream finished for session ${sessionId}.`);
     }
 
-    if (isInterrupted) {
-      // Interruption handler saves state and broadcasts, so we exit loop
-      break;
-    }
-
-    // Append tool output to state
-    state.messages.push({
-      role: 'tool',
-      name: parsedResponse.tool_to_use,
-      content: toolResult,
-    });
-
-    // 5. Update Task Snapshot to database (Durable State persistence)
-    const updatedTask = await prisma.agentTask.update({
-      where: { id: taskId },
+  } catch (error: any) {
+    console.error(`[ORCHESTRATOR CRITICAL] Orchestrator loop crash:`, error.message || error);
+    
+    const errMsg = `System error: Failed to process assistant reasoning block (${error.message || String(error)}). Check local services.`;
+    broadcastToken(sessionId, `\n\n*(Error: ${errMsg})*`);
+    
+    await prisma.message.create({
       data: {
-        status,
-        graphState: state as any,
+        sessionId,
+        role: 'assistant',
+        content: `Error: ${errMsg}`,
       },
     });
 
-    // Broadcast update via WebSocket
-    broadcastTaskUpdate({
-      taskId,
-      status,
-      title: updatedTask.title,
-      graphState: state,
-    });
-
-    console.log(`[ORCHESTRATOR] Task ${taskId} status updated to ${status}. Snapshot saved.`);
+    broadcastSessionUpdate(sessionId, 'chat_done');
   }
-
-  if (iterations >= maxIterations && status === 'RUNNING') {
-    console.warn(`[ORCHESTRATOR] Task reached maximum iterations (${maxIterations}) and was paused.`);
-    status = 'PAUSED';
-    await prisma.agentTask.update({
-      where: { id: taskId },
-      data: { status },
-    });
-    broadcastTaskUpdate({ taskId, status, title: task.title, graphState: state });
-  }
-
-  console.log(`[ORCHESTRATOR] Loop finished for task ${taskId}. Current status: ${status}`);
 }

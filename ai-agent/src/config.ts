@@ -1,0 +1,46 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
+export type LLMProfile = 'SMALL_MODEL' | 'LARGE_MODEL';
+
+export interface AppConfig {
+  ENABLE_TOOLS_LAYERING: boolean;
+  ENABLE_SELF_IMPROVEMENT: boolean;
+  LLM_PROFILE: LLMProfile;
+  DISABLED_TOOLS: string[];
+}
+
+const llmProfileEnv = (process.env.LLM_PROFILE || 'LARGE_MODEL').toUpperCase();
+const llmProfile: LLMProfile = llmProfileEnv === 'SMALL_MODEL' ? 'SMALL_MODEL' : 'LARGE_MODEL';
+
+// Self-improvement is off by default for small models to avoid dangerous code generation
+const defaultSelfImprovement = llmProfile === 'LARGE_MODEL';
+// Tools layering is on by default for large models to save context/attention
+const defaultToolsLayering = llmProfile === 'LARGE_MODEL';
+
+const disabledToolsString = process.env.DISABLED_TOOLS || '';
+const initialDisabledTools = disabledToolsString
+  .split(',')
+  .map(t => t.trim())
+  .filter(t => t.length > 0);
+
+// Global environment-level immutable copy to track locks
+export const IMMUTABLE_DISABLED_TOOLS: string[] = [...initialDisabledTools];
+
+export const config: AppConfig = {
+  LLM_PROFILE: llmProfile,
+  ENABLE_TOOLS_LAYERING: process.env.ENABLE_TOOLS_LAYERING !== undefined 
+    ? process.env.ENABLE_TOOLS_LAYERING === 'true' 
+    : defaultToolsLayering,
+  ENABLE_SELF_IMPROVEMENT: process.env.ENABLE_SELF_IMPROVEMENT !== undefined 
+    ? process.env.ENABLE_SELF_IMPROVEMENT === 'true' 
+    : defaultSelfImprovement,
+  DISABLED_TOOLS: [...initialDisabledTools],
+};
+
+console.log('[CONFIG] Master Switchboard Settings Initialized:', {
+  LLM_PROFILE: config.LLM_PROFILE,
+  ENABLE_TOOLS_LAYERING: config.ENABLE_TOOLS_LAYERING,
+  ENABLE_SELF_IMPROVEMENT: config.ENABLE_SELF_IMPROVEMENT,
+  DISABLED_TOOLS: config.DISABLED_TOOLS
+});
