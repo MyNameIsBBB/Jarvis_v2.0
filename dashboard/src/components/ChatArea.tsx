@@ -428,6 +428,26 @@ export default function ChatArea({
           })
         )}
 
+        {/* Thinking Indicator */}
+        {isProcessing && !activeTool && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
+          <div className="flex items-start gap-3 md:gap-4 max-w-[95%] md:max-w-[85%] mr-auto animate-fade-in">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border shrink-0 ${
+              isLight ? 'bg-[#a07c5a] text-white border-[#8e6b4a]' : 'bg-[#8c7355] border-[#786146] text-white'
+            }`}>
+              <Sparkles className="w-4 h-4 animate-pulse" />
+            </div>
+            <div className={`flex flex-col min-w-[60px] p-4 rounded-2xl rounded-tl-none border shadow-sm ${
+              isLight ? 'bg-white border-[#e9dcce]' : 'bg-[#1a1715] border-[#2a2622]'
+            }`}>
+              <div className="flex items-center gap-1 h-3">
+                <span className="w-1.5 h-1.5 bg-[#a07c5a] dark:bg-[#d4c3b3] rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                <span className="w-1.5 h-1.5 bg-[#a07c5a] dark:bg-[#d4c3b3] rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                <span className="w-1.5 h-1.5 bg-[#a07c5a] dark:bg-[#d4c3b3] rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Dynamic tool status */}
         {activeTool && (
           <div className="flex items-center gap-4 max-w-[80%] mr-auto animate-fade-in">
