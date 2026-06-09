@@ -297,6 +297,34 @@ router.post('/sessions/:id/messages', async (req, res) => {
 });
 
 /**
+ * DELETE /api/sessions/:id/messages
+ * Clears all messages from a specific session.
+ */
+router.delete('/sessions/:id/messages', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const session = await prisma.chatSession.findUnique({
+      where: { id },
+    });
+
+    if (!session) {
+      return res.status(404).json({ error: `Session with ID ${id} not found.` });
+    }
+
+    await prisma.message.deleteMany({
+      where: { sessionId: id },
+    });
+
+    broadcastSessionUpdate(id, 'chat_done');
+
+    return res.json({ success: true, message: 'Chat history cleared successfully.' });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || String(error) });
+  }
+});
+
+/**
  * DELETE /api/sessions/:id
  * Deletes a session and its associated messages.
  */

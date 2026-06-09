@@ -19,7 +19,8 @@ import {
   Volume2,
   Mic,
   MicOff,
-  Database
+  Database,
+  Trash2
 } from 'lucide-react';
 
 export interface Message {
@@ -70,6 +71,7 @@ interface ChatAreaProps {
   onToggleListening: () => void;
   speakingMessageId: string | null;
   onSpeak: (text: string, msgId: string) => void;
+  onClearChat: () => void;
 }
 
 export default function ChatArea({
@@ -89,7 +91,8 @@ export default function ChatArea({
   isListening,
   onToggleListening,
   speakingMessageId,
-  onSpeak
+  onSpeak,
+  onClearChat
 }: ChatAreaProps) {
   
   const isLight = theme === 'light';
@@ -249,6 +252,18 @@ export default function ChatArea({
             </h2>
             <p className="text-[9px] text-zinc-500 font-mono -mt-0.5">Session ID: {selectedSessionId}</p>
           </div>
+          <button
+            onClick={onClearChat}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-all ${
+              isLight 
+                ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200' 
+                : 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20'
+            }`}
+            title="Clear chat history in this session"
+          >
+            <Trash2 className="w-3 h-3" />
+            Clear Chat
+          </button>
         </div>
       )}
 

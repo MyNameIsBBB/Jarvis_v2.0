@@ -342,6 +342,25 @@ export default function Dashboard() {
     }
   };
 
+  const handleClearChat = async () => {
+    if (!selectedSessionId) return;
+    if (!confirm('Are you sure you want to clear all messages in this session?')) return;
+
+    try {
+      const res = await fetch(`${API_URL}/sessions/${selectedSessionId}/messages`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to clear chat.');
+      
+      setMessages([]);
+      setActiveTool(null);
+      setApprovalRequest(null);
+      fetchSessions(); // Refresh session metadata (message counts)
+    } catch (err: any) {
+      alert(err.message || 'Error clearing chat.');
+    }
+  };
+
   const handleToggleTool = async (name: string, enabled: boolean) => {
     try {
       const res = await fetch(`${API_URL}/config/tools`, {
@@ -804,6 +823,7 @@ export default function Dashboard() {
           onToggleListening={handleToggleListening}
           speakingMessageId={speakingMessageId}
           onSpeak={handleSpeakText}
+          onClearChat={handleClearChat}
         />
 
         {/* Desktop Right Panel */}
