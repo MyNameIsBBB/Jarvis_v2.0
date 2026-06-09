@@ -21,6 +21,14 @@ export async function routeSessionMessage(
 ): Promise<RoutingResult> {
   console.log(`[ROUTER] Classifying prompt routing for: "${prompt.slice(0, 50)}..."`);
 
+  // Fast-path bypass for CPU performance: If already in a session, stay in it.
+  if (currentSessionId) {
+    return {
+      sessionId: currentSessionId,
+      isRedirect: false,
+    };
+  }
+
   try {
     // 1. Fetch all existing sessions
     const sessions = await prisma.chatSession.findMany({
