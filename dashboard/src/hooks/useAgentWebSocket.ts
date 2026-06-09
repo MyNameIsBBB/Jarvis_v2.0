@@ -47,7 +47,7 @@ export function useAgentWebSocket(onMessageReceived: (payload: WebSocketPayload)
     };
 
     ws.onerror = (error) => {
-      console.error('[WS] Connection error occurred:', error);
+      // console.error('[WS] Connection error occurred:', error);
     };
 
     return () => {

@@ -168,6 +168,79 @@ class ToolRegistry {
       }
     });
 
+    // 4.5 web_search
+    this.registerTool({
+      name: 'web_search',
+      description: 'Perform a web search using a search engine to find current information, news, or URLs for a given query.',
+      category: 'Developer',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'The search query string.' }
+        },
+        required: ['query']
+      },
+      handler: async (args: { query: string }) => {
+        try {
+          // Use DuckDuckGo HTML Lite search
+          const res = await axios.post(
+            'https://lite.duckduckgo.com/lite/',
+            new URLSearchParams({ q: args.query }),
+            {
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+              },
+              timeout: 15000
+            }
+          );
+          
+          const html = res.data;
+          const results: string[] = [];
+          
+          // Basic regex to extract results from duckduckgo lite
+          const resultRegex = /<a rel="nofollow" href="([^"]+)" class="result-url">[^<]+<\/a>.*?<td class="result-snippet">([^<]+)<\/td>/gs;
+          let match;
+          let count = 0;
+          while ((match = resultRegex.exec(html)) !== null && count < 5) {
+            results.push(`URL: ${match[1]}\nSnippet: ${match[2].trim()}`);
+            count++;
+          }
+          
+          // Fallback if the first regex doesn't match the current Lite HTML structure
+          if (results.length === 0) {
+             const alternativeRegex = /<a[^>]+href="([^"]+)"[^>]*>([^<]+)<\/a><\/td><\/tr><tr><td class="result-snippet">([^<]+)<\/td>/gs;
+             let altMatch;
+             let altCount = 0;
+             while ((altMatch = alternativeRegex.exec(html)) !== null && altCount < 5) {
+               results.push(`URL: ${altMatch[1]}\nTitle: ${altMatch[2].trim()}\nSnippet: ${altMatch[3].trim()}`);
+               altCount++;
+             }
+          }
+
+          if (results.length === 0) {
+             // Second fallback: generic link extraction
+             const linksRegex = /<a href="([^"]+)"[^>]*>([^<]+)<\/a>/g;
+             let linkMatch;
+             let linkCount = 0;
+             while ((linkMatch = linksRegex.exec(html)) !== null && linkCount < 10) {
+               if (linkMatch[1].startsWith('http') && !linkMatch[1].includes('duckduckgo.com')) {
+                 results.push(`URL: ${linkMatch[1]}\nTitle: ${linkMatch[2].trim()}`);
+                 linkCount++;
+               }
+             }
+          }
+
+          if (results.length === 0) {
+            return JSON.stringify({ success: false, error: 'No results found. Try a different query.' });
+          }
+          return JSON.stringify({ success: true, results: results.join('\\n\\n') });
+        } catch (e: any) {
+          return JSON.stringify({ success: false, error: e.message || String(e) });
+        }
+      }
+    });
+
     // 5. web_search_scraper
     this.registerTool({
       name: 'web_search_scraper',
