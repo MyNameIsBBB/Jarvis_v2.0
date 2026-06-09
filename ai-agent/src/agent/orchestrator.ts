@@ -70,7 +70,7 @@ export async function runAgentLoop(sessionId: string): Promise<void> {
       try {
         const classificationPrompt = `System: You are an intent classifier. Categorize the user's latest query into zero, one, or more of these categories:
         - FileManagement (if the user wants to read, write, search, or list files/directories)
-        - HomeLab (if the user wants to start, stop, monitor or execute commands on the Minecraft server container)
+        - HomeLab (if the user wants to start, stop, or monitor home-lab systems)
         - Developer (if the user wants to run code execution, sandboxes, scripts, or terminal commands)
         - SelfImprovement (if the user wants to create a new tool, write code for a new function, or expand assistant capabilities)
         - Dynamic (if the user wants to run a custom dynamic tool previously created)

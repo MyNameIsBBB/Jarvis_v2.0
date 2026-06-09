@@ -18,7 +18,8 @@ import {
   FileCode,
   Volume2,
   Mic,
-  MicOff
+  MicOff,
+  Database
 } from 'lucide-react';
 
 export interface Message {
@@ -273,13 +274,16 @@ export default function ChatArea({
                 <p className="text-[10px] text-[#7c7267] dark:text-[#a89e95] mt-1.5 leading-normal font-sans">"Tell me about the gemma4 LLM capabilities"</p>
               </div>
               <div 
-                onClick={() => setInputText("Check the status of my Minecraft Server")}
-                className={suggestionCard}
+                onClick={() => setInputText("Check the CPU and Memory metrics")}
+                className={`p-3 rounded-xl border text-left cursor-pointer transition-all active:scale-[0.98] ${
+                  isLight ? 'bg-white border-[#e9dcce] hover:border-[#a07c5a] shadow-sm' : 'bg-[#1a1715] border-[#2a2622] hover:border-[#8c7355]'
+                }`}
               >
-                <p className="text-xs font-bold flex items-center gap-1.5 text-[#a07c5a] dark:text-[#d4c3b3]">
-                  <Gamepad2 className="w-3.5 h-3.5" /> Game Server Control
-                </p>
-                <p className="text-[10px] text-[#7c7267] dark:text-[#a89e95] mt-1.5 leading-normal font-sans">"Check status of Minecraft server"</p>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Database className={`w-3.5 h-3.5 ${isLight ? 'text-[#a07c5a]' : 'text-[#8c7355]'}`} />
+                  <span className={`text-[10px] font-bold uppercase tracking-wider font-mono ${isLight ? 'text-[#3f3a36]' : 'text-zinc-300'}`}>System Monitor</span>
+                </div>
+                <p className="text-[10px] text-[#7c7267] dark:text-[#a89e95] mt-1.5 leading-normal font-sans">"Check CPU and Memory metrics"</p>
               </div>
               <div 
                 onClick={() => setInputText("Create a weather_helper tool that fetches temp")}
@@ -459,7 +463,7 @@ export default function ChatArea({
               <span className="text-[9px] font-mono text-zinc-550 uppercase tracking-wider">Verification Notes (Optional):</span>
               <input
                 type="text"
-                placeholder="E.g., verified Minecraft backup path, check log parameters..."
+                placeholder="E.g., verified database backup path, check log parameters..."
                 id="approval-notes-input"
                 className={`w-full focus:outline-none rounded-xl px-3.5 py-2 text-xs border ${
                   isLight 

@@ -621,17 +621,6 @@ export default function Dashboard() {
           </p>
         </div>
 
-        <div className={`p-3.5 border rounded-xl space-y-2 ${isLight ? 'bg-[#faf6f0] border-[#e9dcce]' : 'bg-[#141210] border-[#2a2622]'}`}>
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold flex items-center gap-1.5 font-sans">
-              <Gamepad2 className="w-3.5 h-3.5 text-[#a07c5a] dark:text-[#8c7355]" /> minecraft_controller
-            </span>
-            <span className={`text-[9px] border px-1.5 py-0.5 rounded font-mono ${isLight ? 'bg-[#a07c5a]/10 border-[#a07c5a]/20 text-[#a07c5a]' : 'bg-[#8c7355]/10 border-[#8c7355]/20 text-[#d4c3b3]'}`}>STANDBY</span>
-          </div>
-          <p className="text-[10px] text-[#7c7267] dark:text-[#a89e95] leading-normal font-sans">
-            RCON & Docker command bridge. Directly connects to Minecraft Docker sandbox to start/stop server or invoke console commands.
-          </p>
-        </div>
 
         <div className={`p-3.5 border rounded-xl space-y-2 ${isLight ? 'bg-[#faf6f0] border-[#e9dcce]' : 'bg-[#141210] border-[#2a2622]'}`}>
           <div className="flex items-center justify-between">

@@ -52,7 +52,7 @@ ${sessionListStr}
 
 Classification Rules:
 1. General Sandbox: If the input is conversational, a greeting, math-centric, general advice, or basic chit-chat (e.g. "hi", "how are you", "what is 2+2", "tell me a joke"), choose the "General Chat" session ID: "${generalSession.id}".
-2. Semantic Match: If the input is about a specific ongoing project, task, topic, or context matching one of the existing session titles (e.g., if input is about Minecraft status and there is a session about Minecraft, or file coding when a coding session exists), choose that session's ID.
+2. Semantic Match: If the input is about a specific ongoing project, task, topic, or context matching one of the existing session titles (e.g., if input is about server status and there is a session about the server, or file coding when a coding session exists), choose that session's ID.
 3. New Context: If the input introduces a completely distinct standalone objective, query, or project initialization not matching any existing session (e.g., "let's build a discord bot from scratch", "write a shopping list for carbonara recipe"), decide to create a new session.
 
 You must respond ONLY with a raw JSON block matching this interface:

@@ -7,7 +7,6 @@ import axios from 'axios';
 import { config } from '../config';
 import { 
   workspace_file_manager, 
-  minecraft_server_controller, 
   docker_sandbox_executor 
 } from '../agent/tools';
 import { waitingApprovals } from '../utils/approval';
@@ -201,12 +200,11 @@ class ToolRegistry {
       parameters: {
         type: 'object',
         properties: {
-          action: { type: 'string', enum: ['metrics', 'minecraft_status', 'minecraft_logs', 'minecraft_command'] },
-          command: { type: 'string', description: 'Console command for Minecraft server.' }
+          action: { type: 'string', enum: ['metrics'] }
         },
         required: ['action']
       },
-      handler: async (args: { action: 'metrics' | 'minecraft_status' | 'minecraft_logs' | 'minecraft_command'; command?: string }) => {
+      handler: async (args: { action: 'metrics' }) => {
         try {
           if (args.action === 'metrics') {
             const totalMem = os.totalmem();
@@ -224,11 +222,8 @@ class ToolRegistry {
                 pctUsed: memUsagePct
               }
             });
-          } else {
-            // Forward actions directly to Minecraft controller module
-            const mappedAction = args.action === 'minecraft_command' ? 'command' : args.action === 'minecraft_status' ? 'status' : 'status';
-            return await minecraft_server_controller({ action: mappedAction as any, command: args.command });
           }
+          return JSON.stringify({ success: false, error: `Unsupported action: ${args.action}` });
         } catch (e: any) {
           return JSON.stringify({ success: false, error: e.message || String(e) });
         }
