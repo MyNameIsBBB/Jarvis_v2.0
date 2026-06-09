@@ -553,7 +553,7 @@ export default function ChatArea({
           </button>
         </form>
         <div className="text-center text-[9px] text-[#7c7267] dark:text-[#a89e95] mt-2.5 font-mono uppercase tracking-wider flex items-center justify-center gap-3">
-          <span>Local inference: Ollama (gemma4)</span>
+          <span>Local inference: Ollama (Agent)</span>
           {backendConfig && (
             <>
               <span>•</span>

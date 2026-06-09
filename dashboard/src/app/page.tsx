@@ -651,7 +651,7 @@ export default function Dashboard() {
         </div>
         <div className="flex justify-between border-b border-[#e9dcce]/60 dark:border-zinc-800 pb-1.5">
           <span className="text-[#7c7267] dark:text-zinc-550">Model Name:</span>
-          <span className="text-[#a07c5a] dark:text-[#d4c3b3]">gemma4</span>
+          <span className="text-[#a07c5a] dark:text-[#d4c3b3]">Agent</span>
         </div>
         <div className="flex justify-between border-b border-[#e9dcce]/60 dark:border-zinc-800 pb-1.5">
           <span className="text-[#7c7267] dark:text-zinc-550">Database Engine:</span>
