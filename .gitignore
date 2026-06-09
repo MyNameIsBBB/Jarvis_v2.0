@@ -10,6 +10,8 @@ out/
 build/
 dist/
 
+disabled_tools.json
+
 # Database, secrets and environment configurations
 .env
 .env.local
