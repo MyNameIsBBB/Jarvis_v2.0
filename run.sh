@@ -4,6 +4,8 @@ echo "🛑 Stopping existing instances of Jarvis..."
 # Kill any processes running on port 3000 (ai-agent) and 3001 (dashboard)
 lsof -ti:3000 | xargs kill -9 2>/dev/null
 lsof -ti:3001 | xargs kill -9 2>/dev/null
+# Kill any existing tailscale funnel instances
+pkill -f "tailscale funnel" 2>/dev/null
 
 echo "🧹 Clearing caches..."
 rm -rf dashboard/.next
@@ -29,11 +31,13 @@ echo "========================================="
 echo "✅ Jarvis is now running!"
 echo "   - Dashboard: http://localhost:3001"
 echo "   - Backend:   http://localhost:3000"
-echo ""
-echo "To expose the dashboard to the internet, run this in a new terminal:"
-echo "   tailscale funnel 3001"
 echo "========================================="
+echo "🚀 Exposing dashboard to the internet via Tailscale Funnel..."
+tailscale funnel 3001 &
+TAILSCALE_PID=$!
+
+echo ""
 echo "Press [CTRL+C] to stop all services."
 
-# Wait for both background processes
-wait $AGENT_PID $DASHBOARD_PID
+# Wait for all background processes
+wait $AGENT_PID $DASHBOARD_PID $TAILSCALE_PID
