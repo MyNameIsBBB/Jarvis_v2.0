@@ -1,5 +1,29 @@
 #!/bin/bash
 
+# Parse arguments
+USE_DOCKER=0
+if [[ "$1" == "--docker" || "$1" == "-d" ]]; then
+    USE_DOCKER=1
+fi
+
+if [ $USE_DOCKER -eq 1 ]; then
+    echo "🐳 Starting Jarvis with Docker..."
+    echo "🛑 Stopping existing instances..."
+    docker compose down 2>/dev/null
+    
+    echo "🚀 Building and starting containers..."
+    docker compose up --build -d
+    
+    echo "========================================="
+    echo "✅ Jarvis (Docker) is now running in the background!"
+    echo "   - Dashboard: http://localhost:3001"
+    echo "   - Backend:   http://localhost:3000"
+    echo "========================================="
+    echo "To view logs: docker compose logs -f"
+    echo "To stop: docker compose down"
+    exit 0
+fi
+
 echo "🛑 Stopping existing instances of Jarvis..."
 # Kill any processes running on port 3000 (ai-agent) and 3001 (dashboard)
 lsof -ti:3000 | xargs kill -9 2>/dev/null
