@@ -127,7 +127,7 @@ export async function runAgentLoop(sessionId: string): Promise<void> {
     }, {
       responseType: 'stream',
       headers: { 'Content-Type': 'application/json' },
-      timeout: 90000,
+      timeout: 300000, // 5 minutes timeout for slow CPU-only Linux servers
     });
 
     let assistantText = '';
