@@ -17,7 +17,11 @@ export function useAgentWebSocket(onMessageReceived: (payload: WebSocketPayload)
 
   useEffect(() => {
     // Determine WebSocket host URL
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3000';
+    let wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3000';
+    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${protocol}//${window.location.host}/ws`;
+    }
     console.log(`[WS] Connecting to ${wsUrl}...`);
     
     const ws = new WebSocket(wsUrl);
