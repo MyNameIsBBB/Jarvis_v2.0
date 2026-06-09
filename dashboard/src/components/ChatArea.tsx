@@ -15,7 +15,10 @@ import {
   Cpu,
   Lock,
   CheckCircle2,
-  FileCode
+  FileCode,
+  Volume2,
+  Mic,
+  MicOff
 } from 'lucide-react';
 
 export interface Message {
@@ -60,6 +63,12 @@ interface ChatAreaProps {
   chatEndRef: React.RefObject<HTMLDivElement | null>;
   approvalRequest: { waiting: boolean; prompt?: string; variables?: string } | null;
   onRespondApproval: (approved: boolean, notes: string) => Promise<void>;
+  
+  // Voice addition props
+  isListening: boolean;
+  onToggleListening: () => void;
+  speakingMessageId: string | null;
+  onSpeak: (text: string, msgId: string) => void;
 }
 
 export default function ChatArea({
@@ -75,22 +84,26 @@ export default function ChatArea({
   backendConfig,
   chatEndRef,
   approvalRequest,
-  onRespondApproval
+  onRespondApproval,
+  isListening,
+  onToggleListening,
+  speakingMessageId,
+  onSpeak
 }: ChatAreaProps) {
   
   const isLight = theme === 'light';
 
   const bubbleUser = isLight 
-    ? 'bg-[#eadecc] text-[#3f3a36] border border-[#d6c4ae] rounded-tr-none' 
-    : 'bg-[#2d2d30] text-[#f2eee9] border border-zinc-800 rounded-tr-none';
+    ? 'bg-[#eadecc] text-[#3f3a36] border border-[#d6c4ae] rounded-tr-none shadow-sm' 
+    : 'bg-[#2d2d30] text-[#f2eee9] border border-zinc-800 rounded-tr-none shadow-sm';
   
   const bubbleAssistant = isLight 
     ? 'bg-[#f4ebe1]/35 border border-[#e9dcce]/50 text-zinc-850 rounded-tl-none shadow-sm' 
     : 'bg-[#1d1a17]/40 border border-[#2a2622] text-[#f2eee9] rounded-tl-none shadow-sm';
   
   const bubbleTool = isLight 
-    ? 'bg-[#fdfbf7] border border-[#e9dcce] text-zinc-700 rounded-tl-none border-dashed' 
-    : 'bg-[#121214] border border-[#2a2622] text-[#a89e95] rounded-tl-none border-dashed';
+    ? 'bg-[#fdfbf7] border border-[#e9dcce] text-zinc-700 rounded-tl-none border-dashed shadow-sm' 
+    : 'bg-[#121214] border border-[#2a2622] text-[#a89e95] rounded-tl-none border-dashed shadow-sm';
 
   const suggestionCard = isLight
     ? 'p-4 border border-[#e9dcce] bg-[#fdfbf7] hover:border-[#a07c5a] hover:bg-[#eadecc]/20 rounded-2xl text-left transition-all cursor-pointer shadow-[0_1px_2px_rgba(0,0,0,0.02)]'
@@ -298,14 +311,14 @@ export default function ChatArea({
             return (
               <div
                 key={msg.id || index}
-                className={`flex items-start gap-3 md:gap-4 max-w-[95%] md:max-w-[85%] ${
+                className={`flex items-start gap-3 md:gap-4 max-w-[95%] md:max-w-[85%] animate-fade-in ${
                   isUser ? 'ml-auto flex-row-reverse' : 'mr-auto'
                 }`}
               >
                 {/* Icon */}
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center border shrink-0 ${
                   isUser 
-                    ? 'bg-zinc-100 dark:bg-zinc-900 border-zinc-300 dark:border-zinc-800 text-zinc-500 dark:text-zinc-300' 
+                    ? 'bg-zinc-105 dark:bg-zinc-900 border-zinc-300 dark:border-zinc-800 text-zinc-500 dark:text-zinc-300' 
                     : isTool 
                     ? 'bg-zinc-200/50 dark:bg-zinc-950 border-zinc-350 dark:border-zinc-850 text-zinc-500'
                     : isLight
@@ -315,16 +328,32 @@ export default function ChatArea({
                   {isUser ? <User className="w-4 h-4" /> : isTool ? <Code className="w-3.5 h-3.5" /> : <Sparkles className="w-4 h-4" />}
                 </div>
 
-                {/* Content */}
-                <div className="flex flex-col gap-1 w-full font-sans">
-                  <div className={`text-[9px] font-mono text-zinc-400 dark:text-[#a89e95] uppercase tracking-widest px-1 ${
-                    isUser ? 'text-right' : 'text-left'
+                {/* Content aligned dynamically based on sender */}
+                <div className={`flex flex-col gap-1 w-full font-sans ${isUser ? 'items-end' : 'items-start'}`}>
+                  <div className={`text-[9px] font-mono text-zinc-400 dark:text-[#a89e95] uppercase tracking-widest px-1 flex items-center gap-1.5 select-none ${
+                    isUser ? 'text-right justify-end' : 'text-left justify-start'
                   }`}>
-                    {isUser ? 'You' : isTool ? `Background Tool output // ${msg.name}` : 'Jarvis'}
+                    <span>{isUser ? 'You' : isTool ? `Background Tool output // ${msg.name}` : 'Jarvis'}</span>
+                    
+                    {/* TTS Button */}
+                    {!isUser && !isTool && (
+                      <button
+                        type="button"
+                        onClick={() => onSpeak(msg.content, msg.id)}
+                        className={`hover:text-[#a07c5a] dark:hover:text-[#d4c3b3] transition-colors p-0.5 cursor-pointer rounded-md hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50`}
+                        title="Read out loud"
+                      >
+                        {speakingMessageId === msg.id ? (
+                          <span className="w-2.5 h-2.5 inline-block bg-[#a07c5a] dark:bg-[#d4c3b3] rounded-full animate-ping" />
+                        ) : (
+                          <Volume2 className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
                   </div>
 
-                  {/* Bubble */}
-                  <div className={`p-4 rounded-2xl text-xs leading-relaxed transition-all ${
+                  {/* Flexible Width Bubble container */}
+                  <div className={`p-4 rounded-2xl text-xs leading-relaxed transition-all w-fit max-w-full ${
                     isUser ? bubbleUser : isTool ? bubbleTool : bubbleAssistant
                   }`}>
                     {isTool ? (
@@ -336,16 +365,16 @@ export default function ChatArea({
                               return (
                                 <>
                                   {parsedTool.success ? (
-                                    <span className="text-emerald-650 dark:text-emerald-500 font-bold flex items-center gap-1">
+                                    <span className="text-emerald-600 dark:text-emerald-500 font-bold flex items-center gap-1">
                                       <CheckCircle2 className="w-3.5 h-3.5" /> Success
                                     </span>
                                   ) : (
                                     <span className="text-red-500 font-bold">✖ Failed</span>
                                   )}
                                   {parsedTool.message && <div className="text-zinc-650 dark:text-[#a89e95] mt-1">{parsedTool.message}</div>}
-                                  {parsedTool.content && <div className="text-zinc-650 dark:text-[#a89e95] mt-1 bg-zinc-100 dark:bg-zinc-950 p-2.5 rounded border border-[#eadecc] dark:border-zinc-850 font-mono whitespace-pre-wrap">{parsedTool.content}</div>}
+                                  {parsedTool.content && <div className="text-zinc-650 dark:text-[#a89e95] mt-1 bg-zinc-150 dark:bg-zinc-950 p-2.5 rounded border border-[#eadecc] dark:border-zinc-850 font-mono">{parsedTool.content}</div>}
                                   {parsedTool.schema && (
-                                    <div className="mt-2 bg-zinc-100 dark:bg-zinc-950 p-2.5 rounded border border-[#eadecc] dark:border-zinc-850 font-mono text-[9px] text-zinc-550 dark:text-zinc-400">
+                                    <div className="mt-2 bg-zinc-150 dark:bg-zinc-950 p-2.5 rounded border border-[#eadecc] dark:border-zinc-850 font-mono text-[9px] text-zinc-550 dark:text-zinc-400">
                                       <div className="font-bold flex items-center gap-1 mb-1 text-[#a07c5a] dark:text-[#d4c3b3]">
                                         <FileCode className="w-3.5 h-3.5" /> schema.prisma Schema Definition:
                                       </div>
@@ -355,7 +384,7 @@ export default function ChatArea({
                                   {parsedTool.testLogs && (
                                     <div className="mt-2">
                                       <div className="text-[9px] uppercase tracking-wider text-zinc-500 font-semibold mb-1">Sandbox Compile/Verification Output:</div>
-                                      <div className="bg-zinc-100 dark:bg-zinc-950 text-zinc-650 dark:text-[#a89e95] p-2.5 rounded border border-[#eadecc] dark:border-zinc-850 text-[9px] font-mono whitespace-pre-wrap">
+                                      <div className="bg-zinc-150 dark:bg-zinc-950 text-zinc-650 dark:text-[#a89e95] p-2.5 rounded border border-[#eadecc] dark:border-zinc-850 text-[9px] font-mono whitespace-pre-wrap">
                                         {parsedTool.testLogs}
                                       </div>
                                     </div>
@@ -382,7 +411,7 @@ export default function ChatArea({
 
         {/* Dynamic tool status */}
         {activeTool && (
-          <div className="flex items-center gap-4 max-w-[80%] mr-auto">
+          <div className="flex items-center gap-4 max-w-[80%] mr-auto animate-fade-in">
             <div className="w-8 h-8 rounded-xl bg-[#a07c5a]/10 dark:bg-[#8c7355]/10 border border-[#a07c5a]/20 dark:border-[#8c7355]/20 text-[#a07c5a] dark:text-[#d4c3b3] flex items-center justify-center animate-pulse">
               <Activity className="w-4 h-4" />
             </div>
@@ -395,7 +424,7 @@ export default function ChatArea({
 
         {/* Human Authorization Prompt Overlay */}
         {approvalRequest?.waiting && (
-          <div className={`p-5 rounded-2xl border shadow-md space-y-4 max-w-[90%] md:max-w-[75%] mr-auto ${
+          <div className={`p-5 rounded-2xl border shadow-md space-y-4 max-w-[90%] md:max-w-[75%] mr-auto animate-fade-in ${
             isLight 
               ? 'bg-[#faf6f0] border-[#a07c5a]/45 text-[#3f3a36]' 
               : 'bg-[#1d1a17] border-[#8c7355]/45 text-[#f2eee9]'
@@ -481,18 +510,39 @@ export default function ChatArea({
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder={isProcessing ? "Jarvis is processing..." : "Ask Jarvis to run commands, check server status, or create new functions..."}
-            disabled={isProcessing}
-            className={`focus:outline-none rounded-2xl px-5 py-3.5 text-xs pr-14 transition-colors border w-full ${
-              isLight 
+            placeholder={
+              isListening 
+                ? "🎙️ Listening to voice..." 
+                : isProcessing 
+                ? "Jarvis is processing... (Next prompt will queue)" 
+                : "Ask Jarvis to run commands, check server status, or create new functions..."
+            }
+            className={`focus:outline-none rounded-2xl px-5 py-3.5 text-xs pr-20 transition-colors border w-full ${
+              isListening
+                ? 'bg-amber-500/10 border-amber-500 text-amber-900 dark:text-amber-100 placeholder-amber-700/60'
+                : isLight 
                 ? 'bg-[#fdfbf7] border-[#e9dcce] focus:border-[#a07c5a] text-[#3f3a36] placeholder-[#7c7267]' 
                 : 'bg-zinc-900 border-zinc-800/80 focus:border-[#8c7355] text-[#f2eee9] placeholder-[#a89e95]'
             }`}
-            required
           />
+          
+          {/* Speech Recognition Mic Switch */}
+          <button
+            type="button"
+            onClick={onToggleListening}
+            className={`absolute right-12 p-2 rounded-xl transition-all cursor-pointer ${
+              isListening
+                ? 'text-red-500 bg-red-100 dark:bg-red-950/40 animate-pulse'
+                : 'text-[#a07c5a] dark:text-[#8c7355] hover:bg-zinc-200 dark:hover:bg-[#eadecc]/20'
+            }`}
+            title="Voice typing"
+          >
+            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          </button>
+
           <button
             type="submit"
-            disabled={isProcessing || !inputText.trim()}
+            disabled={!inputText.trim()}
             className={`absolute right-2.5 p-2 ${submitButton} disabled:opacity-30 disabled:hover:scale-100`}
           >
             <Send className="w-4 h-4" />

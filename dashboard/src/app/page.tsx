@@ -34,6 +34,14 @@ export default function Dashboard() {
   const [backendConfig, setBackendConfig] = useState<BackendConfig | null>(null);
   const [approvalRequest, setApprovalRequest] = useState<{ waiting: boolean; prompt?: string; variables?: string } | null>(null);
   
+  // Message Queue system
+  const [messageQueue, setMessageQueue] = useState<string[]>([]);
+
+  // Voice States (STT & TTS)
+  const [isListening, setIsListening] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const recognitionRef = useRef<any>(null);
+
   // Theme management (Cozy Mode)
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [isAutoTheme, setIsAutoTheme] = useState(true);
@@ -102,7 +110,9 @@ export default function Dashboard() {
       const data = (await res.json()) as ChatSession[];
       setSessions(data);
       if (selectFirst && data.length > 0) {
-        setSelectedSessionId(data[0].id);
+        // If there's an ongoing session, choose it, or find General Chat
+        const general = data.find(s => s.title.toLowerCase() === 'general chat');
+        setSelectedSessionId(general ? general.id : data[0].id);
       }
     } catch (err: any) {
       console.error(err);
@@ -150,9 +160,62 @@ export default function Dashboard() {
     scrollToBottom();
   }, [messages, activeTool]);
 
+  // Message Queue worker loop
+  useEffect(() => {
+    const processQueue = async () => {
+      if (messageQueue.length === 0 || isProcessing) return;
+
+      const nextMessageText = messageQueue[0];
+      setMessageQueue((prev) => prev.slice(1));
+      setIsProcessing(true);
+
+      // Instantly append user's text to state
+      const tempUserMsg: Message = {
+        id: Math.random().toString(),
+        role: 'user',
+        content: nextMessageText,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, tempUserMsg]);
+
+      try {
+        const res = await fetch(`${API_URL}/sessions/route`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            content: nextMessageText, 
+            currentSessionId: selectedSessionId 
+          }),
+        });
+
+        if (!res.ok) throw new Error('Could not route message.');
+        const data = await res.json();
+        
+        if (data.sessionId && data.sessionId !== selectedSessionId) {
+          console.log(`[QUEUE ENGINE] API Redirecting to session: ${data.sessionId}`);
+          setSelectedSessionId(data.sessionId);
+        }
+      } catch (err: any) {
+        console.error(err);
+        alert(err.message || 'Error processing message from queue.');
+        setIsProcessing(false);
+      }
+    };
+
+    processQueue();
+  }, [messageQueue, isProcessing, selectedSessionId, API_URL]);
+
   // Handle incoming socket payloads
   const handleWebSocketMessage = useCallback((payload: WebSocketPayload) => {
-    const { type, sessionId, token, toolName, status, result, eventType } = payload;
+    const { type, sessionId, token, toolName, status, result, eventType, targetSessionId } = payload;
+
+    if (type === 'session_redirect') {
+      if (targetSessionId && targetSessionId !== selectedSessionId) {
+        console.log(`[WS REDIRECT] Shifting session viewport: ${selectedSessionId} -> ${targetSessionId}`);
+        setSelectedSessionId(targetSessionId);
+      }
+      return;
+    }
 
     if (sessionId && sessionId !== selectedSessionId) {
       if (type === 'session_update') {
@@ -237,48 +300,14 @@ export default function Dashboard() {
 
   const { isConnected: isWsConnected } = useAgentWebSocket(handleWebSocketMessage);
 
-  // Send message
+  // Push user prompt into sequential processing queue
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || isProcessing) return;
+    if (!inputText.trim()) return;
 
     const text = inputText;
     setInputText('');
-    setIsProcessing(true);
-
-    const tempUserMsg: Message = {
-      id: Math.random().toString(),
-      role: 'user',
-      content: text,
-      createdAt: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, tempUserMsg]);
-
-    try {
-      let currentSessionId = selectedSessionId;
-      
-      if (!currentSessionId) {
-        const res = await fetch(`${API_URL}/sessions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: text }),
-        });
-        if (!res.ok) throw new Error('Could not create new session.');
-        const sessionData = await res.json();
-        setSelectedSessionId(sessionData.id);
-        fetchSessions();
-      } else {
-        const res = await fetch(`${API_URL}/sessions/${currentSessionId}/messages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: text }),
-        });
-        if (!res.ok) throw new Error('Could not send message.');
-      }
-    } catch (err: any) {
-      alert(err.message || 'Error communicating with server.');
-      setIsProcessing(false);
-    }
+    setMessageQueue((prev) => [...prev, text]);
   };
 
   const handleCreateNewSession = () => {
@@ -337,7 +366,6 @@ export default function Dashboard() {
       });
       if (res.ok) {
         setApprovalRequest(null);
-        // Instantly reload messages stream to show tool output results
         fetchMessages(selectedSessionId);
       } else {
         const data = await res.json();
@@ -346,6 +374,87 @@ export default function Dashboard() {
     } catch (err: any) {
       alert(err.message || 'Error communicating approval input.');
     }
+  };
+
+  // Speech-to-Text handler
+  const handleToggleListening = () => {
+    if (isListening) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsListening(false);
+    } else {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert('Web Speech STT Recognition is not supported by your browser.');
+        return;
+      }
+
+      const rec = new SpeechRecognition();
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.lang = 'th-TH'; // Default to Thai language recognition
+
+      rec.onstart = () => {
+        setIsListening(true);
+      };
+
+      rec.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          setInputText((prev) => prev + (prev ? ' ' : '') + transcript);
+        }
+      };
+
+      rec.onerror = (event: any) => {
+        console.error('[STT ERROR] Speech recognition error:', event);
+        setIsListening(false);
+      };
+
+      rec.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = rec;
+      rec.start();
+    }
+  };
+
+  // Text-to-Speech handler
+  const handleSpeakText = (text: string, msgId: string) => {
+    if (speakingMessageId === msgId) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    // Cancel any active readouts
+    window.speechSynthesis.cancel();
+
+    // Sanitize message block
+    const cleanText = text
+      .replace(/\*\*|`|#/g, '')
+      .replace(/\[Tool Call requested:.*?\]/g, '');
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    
+    // Auto-select Thai voice if available
+    const voices = window.speechSynthesis.getVoices();
+    const thVoice = voices.find(v => v.lang.includes('th') || v.lang.includes('TH'));
+    if (thVoice) {
+      utterance.voice = thVoice;
+    }
+
+    utterance.onend = () => {
+      setSpeakingMessageId(null);
+    };
+
+    utterance.onerror = () => {
+      setSpeakingMessageId(null);
+    };
+
+    setSpeakingMessageId(msgId);
+    window.speechSynthesis.speak(utterance);
   };
 
   const isLight = theme === 'light';
@@ -587,11 +696,18 @@ export default function Dashboard() {
                 isLight ? 'bg-zinc-205 border-zinc-300 text-zinc-600' : 'bg-zinc-850 border-zinc-800 text-[#a89e95]'
               }`}>v2.6</span>
             </h1>
-            <p className="text-[8px] md:text-[9px] text-[#7c7267] dark:text-[#a89e95] font-mono -mt-0.5 uppercase tracking-wider">Configuration-Driven Hybrid Orchestration</p>
+            <p className="text-[8px] md:text-[9px] text-[#7c7267] dark:text-[#a89e95] font-mono -mt-0.5 uppercase tracking-wider">Configuration-Driven Hybrid Routing</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Queue Pending Indicator */}
+          {messageQueue.length > 0 && (
+            <div className="px-2.5 py-1 text-[9px] font-bold rounded-lg bg-[#a07c5a]/20 text-[#a07c5a] dark:text-[#d4c3b3] border border-[#a07c5a]/30 animate-pulse font-mono shrink-0">
+              QUEUE: {messageQueue.length} PENDING
+            </div>
+          )}
+
           <div className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-mono tracking-wide ${
             isLight ? 'bg-[#f4ebe1] border-[#e9dcce]' : 'bg-[#1d1a17] border-[#2a2622]'
           }`}>
@@ -675,7 +791,7 @@ export default function Dashboard() {
           {renderSidebarContent()}
         </aside>
 
-        {/* Separated Scrollable Chat component */}
+        {/* Separated Scrollable Chat component with voice extensions */}
         <ChatArea
           messages={messages}
           activeTool={activeTool}
@@ -690,6 +806,10 @@ export default function Dashboard() {
           chatEndRef={chatEndRef}
           approvalRequest={approvalRequest}
           onRespondApproval={handleRespondApproval}
+          isListening={isListening}
+          onToggleListening={handleToggleListening}
+          speakingMessageId={speakingMessageId}
+          onSpeak={handleSpeakText}
         />
 
         {/* Desktop Right Panel */}
@@ -722,7 +842,7 @@ export default function Dashboard() {
               </h3>
               <button
                 onClick={() => setShowSettingsModal(false)}
-                className="text-zinc-450 hover:text-zinc-300 font-bold text-xs cursor-pointer"
+                className="text-zinc-455 hover:text-zinc-300 font-bold text-xs cursor-pointer"
               >
                 ✕
               </button>

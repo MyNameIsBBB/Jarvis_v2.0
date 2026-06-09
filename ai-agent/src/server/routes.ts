@@ -1,12 +1,72 @@
 import { Router } from 'express';
 import { prisma } from '../utils/prisma';
 import { runAgentLoop } from '../agent/orchestrator';
-import { broadcastSessionUpdate } from './ws';
+import { broadcastSessionUpdate, broadcastSessionRedirect } from './ws';
 import { config, IMMUTABLE_DISABLED_TOOLS } from '../config';
 import { registry } from '../tools/registry';
 import { waitingApprovals } from '../utils/approval';
+import { routeSessionMessage } from '../agent/router';
 
 const router = Router();
+
+/**
+ * POST /api/sessions/route
+ * Evaluates semantic routing for the user's message, redirects if necessary,
+ * saves the user message, and launches the orchestrator loop.
+ */
+router.post('/sessions/route', async (req, res) => {
+  const { content, currentSessionId } = req.body;
+
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: 'Missing required field: "content".' });
+  }
+
+  try {
+    // 1. Determine target session using the semantic router
+    const { sessionId: targetSessionId, isRedirect } = await routeSessionMessage(
+      content,
+      currentSessionId
+    );
+
+    // 2. Save user message to target session
+    const userMessage = await prisma.message.create({
+      data: {
+        sessionId: targetSessionId,
+        role: 'user',
+        content,
+      },
+    });
+
+    // Update session timestamp
+    await prisma.chatSession.update({
+      where: { id: targetSessionId },
+      data: { updatedAt: new Date() },
+    });
+
+    // 3. Broadcast redirect command to WS clients if routing shifted
+    if (isRedirect) {
+      console.log(`[ROUTER] Dispatching WS redirect: ${currentSessionId} -> ${targetSessionId}`);
+      broadcastSessionRedirect(currentSessionId || '', targetSessionId);
+    }
+
+    // 4. Trigger orchestrator run loop for target session
+    runAgentLoop(targetSessionId).catch((err) => {
+      console.error(`[ASYNC ERROR] Orchestrator loop crash for session ${targetSessionId}:`, err);
+    });
+
+    return res.json({
+      success: true,
+      sessionId: targetSessionId,
+      isRedirect,
+      messageId: userMessage.id,
+      status: 'PROCESSING',
+    });
+  } catch (error: any) {
+    console.error(`[ROUTER ERROR] Routing API endpoint crash:`, error);
+    return res.status(500).json({ error: error.message || String(error) });
+  }
+});
+
 
 /**
  * GET /api/config

@@ -1,13 +1,14 @@
 import { useEffect, useState, useRef } from 'react';
 
 export interface WebSocketPayload {
-  type: 'chat_token' | 'tool_status' | 'session_update' | 'welcome';
+  type: 'chat_token' | 'tool_status' | 'session_update' | 'welcome' | 'session_redirect';
   sessionId?: string;
   token?: string;
   toolName?: string;
   status?: 'running' | 'completed' | 'failed';
   result?: string;
   eventType?: 'chat_done' | 'session_created' | 'session_deleted';
+  targetSessionId?: string;
 }
 
 export function useAgentWebSocket(onMessageReceived: (payload: WebSocketPayload) => void) {

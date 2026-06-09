@@ -86,3 +86,21 @@ export function broadcastSessionUpdate(sessionId: string, eventType: 'chat_done'
     }
   }
 }
+
+/**
+ * Broadcasts a redirect event to force the client to load a new session context.
+ */
+export function broadcastSessionRedirect(sessionId: string, targetSessionId: string): void {
+  const message = JSON.stringify({
+    type: 'session_redirect',
+    sessionId,
+    targetSessionId,
+  });
+
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  }
+}
+
