@@ -20,7 +20,7 @@ cd ..
 
 echo "🚀 Starting Dashboard (Frontend)..."
 cd dashboard
-PORT=3001 npm run dev &
+npm run dev -- -p 3001 &
 DASHBOARD_PID=$!
 cd ..
 
@@ -35,8 +35,6 @@ echo "========================================="
 echo "🚀 Exposing dashboard to the internet via Tailscale Funnel..."
 sudo tailscale funnel 3001 &
 TAILSCALE_PID=$!
-
-echo ""
 
 echo ""
 echo "Press [CTRL+C] to stop all services."
