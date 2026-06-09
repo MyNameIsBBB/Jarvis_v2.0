@@ -9,7 +9,11 @@ fi
 if [ $USE_DOCKER -eq 1 ]; then
     echo "🐳 Starting Jarvis with Docker..."
     echo "🛑 Stopping existing instances..."
-    docker compose down 2>/dev/null
+    docker compose down -v 2>/dev/null
+    sudo pkill -f "tailscale funnel" 2>/dev/null
+    
+    echo "🧹 Clearing host caches (just in case)..."
+    rm -rf dashboard/.next dashboard/node_modules/.cache ai-agent/node_modules/.cache
     
     echo "🚀 Building and starting containers..."
     docker compose up --build -d
@@ -19,6 +23,10 @@ if [ $USE_DOCKER -eq 1 ]; then
     echo "   - Dashboard: http://localhost:3001"
     echo "   - Backend:   http://localhost:3000"
     echo "========================================="
+    
+    echo "🚀 Exposing dashboard to the internet via Tailscale Funnel..."
+    sudo tailscale funnel 3001 &
+    
     echo "To view logs: docker compose logs -f"
     echo "To stop: docker compose down"
     exit 0
