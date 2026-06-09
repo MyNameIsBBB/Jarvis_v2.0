@@ -5,7 +5,7 @@ echo "🛑 Stopping existing instances of Jarvis..."
 lsof -ti:3000 | xargs kill -9 2>/dev/null
 lsof -ti:3001 | xargs kill -9 2>/dev/null
 # Kill any existing tailscale funnel instances
-pkill -f "tailscale funnel" 2>/dev/null
+sudo pkill -f "tailscale funnel" 2>/dev/null
 
 echo "🧹 Clearing caches..."
 rm -rf dashboard/.next
@@ -33,8 +33,14 @@ echo "   - Dashboard: http://localhost:3001"
 echo "   - Backend:   http://localhost:3000"
 echo "========================================="
 echo "🚀 Exposing dashboard to the internet via Tailscale Funnel..."
-tailscale funnel 3001 &
+sudo tailscale funnel 3001 &
 TAILSCALE_PID=$!
+
+sleep 3
+echo ""
+echo "🔗 Tailscale Funnel Link:"
+sudo tailscale serve status
+echo "========================================="
 
 echo ""
 echo "Press [CTRL+C] to stop all services."
