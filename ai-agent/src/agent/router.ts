@@ -71,7 +71,7 @@ You must respond ONLY with a raw JSON block matching this interface:
       stream: false,
       format: 'json',
       options: { temperature: 0.1 }
-    }, { timeout: 60000 });
+    }, { timeout: 15000 });
 
     const content = response.data.message?.content || '{}';
     console.log(`[ROUTER] LLM Classification response: "${content.trim()}"`);

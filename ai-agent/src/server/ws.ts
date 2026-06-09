@@ -14,12 +14,21 @@ export function initWebSocketServer(server: Server): void {
     clients.add(ws);
     console.log('[WS] Client connected.');
 
+    // Keep connection alive through Next.js proxy and Tailscale
+    const pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, 15000);
+
     ws.on('close', () => {
+      clearInterval(pingInterval);
       clients.delete(ws);
       console.log('[WS] Client disconnected.');
     });
 
     ws.on('error', (err) => {
+      clearInterval(pingInterval);
       console.error('[WS] Client error:', err);
       clients.delete(ws);
     });
