@@ -43,6 +43,7 @@ Jarvis_v2.0/
    DATABASE_URL="postgresql://postgres:postgres@localhost:5432/agentic_db?schema=public"
    OLLAMA_API_URL="http://localhost:11434"
    OLLAMA_MODEL="llama3"
+   DISABLE_DOCKER=false # Set to true to bypass Docker and run command shells locally (e.g. for Windows testing)
    ```
 3. **Docker Permissions (Linux/Ubuntu):**
    Ensure your user has permission to connect to the Docker daemon Unix socket (`/var/run/docker.sock`):

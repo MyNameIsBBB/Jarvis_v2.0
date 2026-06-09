@@ -7,10 +7,14 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 let docker: Docker | null = null;
 
-try {
-  docker = new Docker();
-} catch (err) {
-  console.warn('Dockerode client initialization failed. Sandbox will fall back to local shell execution.');
+if (process.env.DISABLE_DOCKER !== 'true') {
+  try {
+    docker = new Docker();
+  } catch (err) {
+    console.warn('Dockerode client initialization failed. Sandbox will fall back to local shell execution.');
+  }
+} else {
+  console.log('Docker sandbox execution is disabled via environment variable. Running in local workspace shell mode.');
 }
 
 const IMAGE_NAME = 'node:20-alpine';
