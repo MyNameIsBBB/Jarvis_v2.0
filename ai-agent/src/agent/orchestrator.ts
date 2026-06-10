@@ -59,6 +59,7 @@ export async function runAgentLoop(sessionId: string): Promise<void> {
         role: msg.role,
         content: msg.content,
         ...(msg.name ? { name: msg.name } : {}),
+        ...(msg.toolCalls ? { tool_calls: JSON.parse(msg.toolCalls) } : {}),
       })),
     ];
 
@@ -186,7 +187,8 @@ export async function runAgentLoop(sessionId: string): Promise<void> {
         data: {
           sessionId,
           role: 'assistant',
-          content: `[Tool Call requested: ${toolCalls.map(tc => tc.function.name).join(', ')}]`,
+          content: ``, // Let the agent know this is purely a tool call request
+          toolCalls: JSON.stringify(toolCalls),
         },
       });
 

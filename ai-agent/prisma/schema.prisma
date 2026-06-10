@@ -22,5 +22,6 @@ model Message {
   role      String      // "system" | "user" | "assistant" | "tool"
   content   String
   name      String?     // Name of the tool if role is "tool"
+  toolCalls String?     // JSON string of tool calls
   createdAt DateTime  @default(now())
 }
