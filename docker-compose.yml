@@ -12,10 +12,13 @@ services:
             - /var/run/docker.sock:/var/run/docker.sock
         environment:
             - PORT=3000
-            - OLLAMA_API_URL=${OLLAMA_API_URL:-http://host.docker.internal:11434}
+            - OLLAMA_API_URL=${OLLAMA_API_URL:-http://ollama:11434}
+            - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
             - DATABASE_URL=file:./dev.db
         extra_hosts:
             - "host.docker.internal:host-gateway"
+        depends_on:
+            - ollama
         restart: unless-stopped
 
     dashboard:
@@ -36,3 +39,37 @@ services:
         depends_on:
             - ai-agent
         restart: unless-stopped
+
+    ollama:
+        image: ollama/ollama:latest
+        container_name: jarvis-ollama
+        ports:
+            - "11434:11434"
+        volumes:
+            - ollama-data:/root/.ollama
+        restart: unless-stopped
+
+    ollama-pull-model:
+        image: curlimages/curl:latest
+        container_name: jarvis-ollama-pull-model
+        depends_on:
+            - ollama
+        environment:
+            - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
+        entrypoint: [ "/bin/sh", "-c" ]
+        command: |
+            echo "Waiting for Ollama to start..."
+            while ! curl -s http://ollama:11434/api/tags > /dev/null; do
+                sleep 2
+            done
+            echo "Ollama started! Checking if model '$$OLLAMA_MODEL' exists..."
+            if curl -s http://ollama:11434/api/tags | grep -q "$$OLLAMA_MODEL"; then
+                echo "Model '$$OLLAMA_MODEL' already exists."
+            else
+                echo "Model not found. Pulling '$$OLLAMA_MODEL'..."
+                curl -X POST http://ollama:11434/api/pull -d "{\"name\": \"$$OLLAMA_MODEL\"}"
+                echo "Model pulled successfully!"
+            fi
+
+volumes:
+    ollama-data:
