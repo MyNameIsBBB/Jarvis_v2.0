@@ -30,7 +30,8 @@ services:
             - /app/node_modules
             - /app/.next
         environment:
-            - NEXT_PUBLIC_API_URL=http://localhost:3000
+            - NEXT_PUBLIC_API_URL=/api
+            - BACKEND_INTERNAL_URL=http://ai-agent:3000
             - PORT=3001
         depends_on:
             - ai-agent

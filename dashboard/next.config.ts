@@ -6,14 +6,15 @@ const nextConfig: NextConfig = {
   
   // Proxy API and WebSockets to the local Backend (AI-Agent) running on port 3000
   async rewrites() {
+    const backendUrl = process.env.BACKEND_INTERNAL_URL || 'http://localhost:3000';
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:3000/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
       },
       {
         source: '/ws',
-        destination: 'http://localhost:3000', // Proxy websocket connections
+        destination: `${backendUrl}`, // Proxy websocket connections
       }
     ];
   },
